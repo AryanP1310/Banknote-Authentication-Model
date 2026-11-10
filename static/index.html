@@ -1,0 +1,408 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>Mintmark: banknote authenticator</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Bodoni+Moda:opsz,wght@6..96,500;6..96,800&family=Hanken+Grotesk:wght@400;500;600&display=swap" rel="stylesheet">
+<style>
+/* ===== 1. Tokens: taken from currency itself, tinted paper, engraving ink, security-thread gold ===== */
+:root{
+  --paper:#F1E9D3; --ink:#10241F; --muted:#4C5E57; --panel:#E7DDC1; --line:#10241F;
+  --green:#1F6B5B; --seal:#B3342B; --gold:#B38A2E;
+  --display:'Bodoni Moda',Didot,'Times New Roman',serif;
+  --body:'Hanken Grotesk',system-ui,-apple-system,'Segoe UI',sans-serif;
+}
+@media (prefers-color-scheme:dark){
+  :root:not([data-theme="light"]){--paper:#0F1B18;--ink:#EFE7D0;--muted:#A3B3AB;--panel:#172823;--line:#EFE7D0;--green:#4FB39B;--seal:#E5675C;--gold:#D3A94A}
+}
+:root[data-theme="dark"]{--paper:#0F1B18;--ink:#EFE7D0;--muted:#A3B3AB;--panel:#172823;--line:#EFE7D0;--green:#4FB39B;--seal:#E5675C;--gold:#D3A94A}
+
+/* ===== 2. Base ===== */
+*{box-sizing:border-box;margin:0}
+:root{box-sizing:border-box;padding-top:env(safe-area-inset-top,0px);padding-bottom:env(safe-area-inset-bottom,0px)}
+html{scroll-behavior:smooth;scroll-padding-top:calc(env(safe-area-inset-top,0px) + 76px)}
+body{background:var(--paper);color:var(--ink);font:400 1.0625rem/1.6 var(--body);-webkit-font-smoothing:antialiased}
+body::before{content:"";position:fixed;inset:0 0 auto;height:env(safe-area-inset-top,0px);background:var(--paper);z-index:30}
+.wrap{max-width:1120px;margin:0 auto;padding:0 clamp(1.25rem,4vw,2.5rem)}
+h1,h2{font-family:var(--display);font-optical-sizing:auto;line-height:1.04;letter-spacing:-.01em}
+h2{font-size:clamp(2rem,4.4vw,3.2rem);font-weight:800;max-width:17ch}
+p{max-width:62ch}
+a{color:inherit}
+svg{display:block}
+:focus-visible{outline:3px solid var(--gold);outline-offset:3px}
+section.s{padding:clamp(3.5rem,8vw,6rem) 0;border-top:6px double var(--line)}
+
+/* ===== 3. Header + collapsing nav ===== */
+.nav{position:sticky;top:env(safe-area-inset-top,0px);z-index:40;background:var(--paper);border-bottom:1px solid var(--line)}
+.nav .wrap{display:flex;align-items:center;justify-content:space-between;height:64px}
+.brand{display:flex;align-items:center;gap:.6rem;font:800 1.5rem var(--display);text-decoration:none}
+.brand svg{width:30px;height:30px;animation:turn 24s linear infinite}
+.menu{display:flex;gap:2rem;list-style:none;padding:0}
+.menu a{text-decoration:none;font-weight:500;background:linear-gradient(var(--gold),var(--gold)) 0 100%/0 3px no-repeat;transition:background-size .25s}
+.menu a:hover{background-size:100% 3px}
+.burger{display:none;background:none;border:2px solid var(--line);color:var(--ink);width:44px;height:44px;cursor:pointer}
+.burger span,.burger span::before,.burger span::after{display:block;width:20px;height:2px;background:currentColor;margin:auto;position:relative;transition:transform .25s}
+.burger span::before,.burger span::after{content:"";position:absolute;left:0}
+.burger span::before{top:-6px}.burger span::after{top:6px}
+.nav.open .burger span{background:transparent}
+.nav.open .burger span::before{transform:translateY(6px) rotate(45deg)}
+.nav.open .burger span::after{transform:translateY(-6px) rotate(-45deg)}
+@media (max-width:760px){
+  .burger{display:block}
+  .menu{position:absolute;left:0;right:0;top:100%;flex-direction:column;gap:0;background:var(--paper);border-bottom:1px solid var(--line);max-height:0;overflow:hidden;transition:max-height .3s}
+  .nav.open .menu{max-height:260px}
+  .menu a{display:block;padding:1rem clamp(1.25rem,4vw,2.5rem);border-top:1px solid var(--line)}
+}
+
+/* ===== 4. Hero: a specimen note being scanned ===== */
+.hero{display:grid;grid-template-columns:1fr 1.05fr;gap:clamp(2rem,5vw,4rem);align-items:center;padding-top:clamp(2.5rem,7vw,5rem);padding-bottom:clamp(3rem,7vw,5rem)}
+.hero h1{font-size:clamp(2.5rem,6vw,4.7rem);font-weight:800}
+.hero p{margin:1.4rem 0 2rem;font-size:1.15rem;color:var(--muted)}
+.cta{display:flex;flex-wrap:wrap;gap:1rem 1.5rem;align-items:center}
+.btn{display:inline-block;background:var(--ink);color:var(--paper);padding:.9rem 1.6rem;font-weight:600;text-decoration:none;border:2px solid var(--ink);transition:background .2s,color .2s,letter-spacing .2s}
+.btn:hover{background:transparent;color:var(--ink);letter-spacing:.03em}
+.link{font-weight:600;text-underline-offset:5px;text-decoration-thickness:2px;text-decoration-color:var(--gold)}
+.specimen{position:relative;filter:drop-shadow(0 14px 0 rgba(16,36,31,.14))}
+.note{width:100%;height:auto;transform:rotate(-2deg)}
+.beam{animation:scan 7s linear infinite}
+.thread{animation:shine 3.5s ease-in-out infinite}
+.sv{position:absolute;right:7%;bottom:12%;opacity:0;pointer-events:none}
+.sv.g{animation:v1 14s infinite}.sv.f{animation:v2 14s infinite}
+.stamp{display:inline-block;border:5px double currentColor;padding:.25rem 1.1rem;font:800 clamp(1.4rem,3.2vw,2.5rem) var(--display);letter-spacing:.08em;text-transform:uppercase;transform:rotate(-7deg);background:rgba(241,233,211,.55)}
+.good{color:var(--green)}.bad{color:var(--seal)}
+.read{display:grid;gap:.5rem;margin-top:1.4rem}
+.read div{display:grid;grid-template-columns:5.5rem 1fr;gap:.8rem;align-items:center;font-size:.92rem;color:var(--muted)}
+.read i{display:block;height:8px;background:var(--panel);border:1px solid var(--line)}
+.read i::after{content:"";display:block;height:100%;background:var(--green);animation:fill 7s ease-in-out infinite}
+.read div:nth-child(2) i::after{animation-delay:.4s}.read div:nth-child(3) i::after{animation-delay:.8s}.read div:nth-child(4) i::after{animation-delay:1.2s}
+.cap{font-size:.85rem;color:var(--muted);margin-top:.6rem}
+@keyframes turn{to{transform:rotate(360deg)}}
+@keyframes scan{from{transform:translateX(0)}to{transform:translateX(560px)}}
+@keyframes shine{50%{opacity:.35}}
+@keyframes fill{0%,100%{width:6%}50%{width:var(--w,70%)}}
+@keyframes v1{0%,22%{opacity:0}26%{opacity:1;transform:scale(1)}46%{opacity:1}50%,100%{opacity:0}}
+@keyframes v2{0%,72%{opacity:0}76%{opacity:1}96%{opacity:1}100%{opacity:0}}
+
+/* ===== 5. Scoreboard ===== */
+.score{border-top:6px double var(--line)}
+.score .wrap{display:grid;grid-template-columns:repeat(3,1fr)}
+.score div{padding:2rem 1.5rem 2rem 0;border-right:1px solid var(--line)}
+.score div+div{padding-left:1.5rem}.score div:last-child{border-right:0}
+.score b{display:block;font:800 clamp(2.2rem,4.8vw,3.6rem)/1 var(--display)}
+.score span{display:block;margin-top:.5rem;color:var(--muted);max-width:26ch;font-size:.98rem}
+
+/* ===== 6. Live authenticator ===== */
+.try{display:grid;grid-template-columns:1.1fr .9fr;gap:clamp(2rem,5vw,4rem);margin-top:2.5rem;align-items:start}
+.presets{display:flex;flex-wrap:wrap;gap:.6rem;margin-bottom:1.5rem}
+.presets button{background:none;border:2px solid var(--line);color:var(--ink);padding:.5rem 1rem;font:600 .95rem var(--body);cursor:pointer;transition:background .15s}
+.presets button:hover{background:var(--panel)}
+.row{display:grid;grid-template-columns:6.5rem 6rem 1fr;gap:.8rem;align-items:center;margin-bottom:1rem}
+.row label{font-weight:600}
+.row input[type=number]{font:500 1rem var(--body);padding:.5rem .6rem;border:2px solid var(--line);background:var(--paper);color:var(--ink);width:100%;min-width:0}
+.row input[type=range]{width:100%;accent-color:var(--green)}
+.frame{border:2px solid var(--line);outline:1px solid var(--line);outline-offset:5px;background:var(--panel);padding:clamp(1.25rem,3vw,2rem);min-height:260px}
+.frame .stamp{animation:none}.frame .stamp.pop{animation:thunk .45s cubic-bezier(.2,1.4,.4,1)}
+.pf{margin:1.4rem 0 .6rem}
+.meter{position:relative;height:14px;border:2px solid var(--line);background:linear-gradient(90deg,var(--green),var(--gold),var(--seal))}
+.meter i{position:absolute;top:-8px;width:4px;height:26px;background:var(--ink);left:50%;transition:left .5s cubic-bezier(.2,.8,.2,1)}
+.scale{display:flex;justify-content:space-between;font-size:.85rem;color:var(--muted);margin-top:.4rem}
+.note2{font-size:.92rem;color:var(--muted);margin-top:1rem}
+@keyframes thunk{from{transform:rotate(-16deg) scale(1.8);opacity:0}}
+
+/* ===== 7. How it works: accordions + a sigmoid you can move ===== */
+.how{margin-top:2.5rem;max-width:820px}
+details{border-top:1px solid var(--line)}details:last-child{border-bottom:1px solid var(--line)}
+summary{list-style:none;cursor:pointer;display:flex;justify-content:space-between;gap:1rem;padding:1.2rem 0;font:800 1.35rem var(--display)}
+summary::-webkit-details-marker{display:none}
+summary::after{content:"+";font:500 1.8rem/1 var(--body);color:var(--gold);transition:transform .25s}
+details[open] summary::after{transform:rotate(45deg)}
+details>div{padding:0 0 1.5rem;color:var(--muted)}
+details>div p+p{margin-top:.8rem}
+.sgm{margin-top:1rem;max-width:420px}
+.sgm input{width:100%;accent-color:var(--green)}
+.sgm output{display:block;margin-top:.5rem;font-weight:600;color:var(--ink)}
+
+/* ===== 8. Results ===== */
+.res{display:grid;grid-template-columns:1fr 1fr;gap:clamp(2rem,5vw,4rem);margin-top:2.5rem}
+.res h3{font:800 1.4rem var(--display);margin-bottom:1rem}
+.bar label{display:flex;justify-content:space-between;font-weight:600;margin-bottom:.35rem}
+.track{height:28px;border:2px solid var(--line);margin-bottom:1.1rem}
+.track i{display:block;height:100%;width:0;background:var(--gold);transition:width 1.3s cubic-bezier(.2,.8,.2,1)}
+.bar+.bar i{background:var(--green);transition-delay:.25s}
+.in .track i{width:var(--w)}
+.matrix{display:grid;grid-template-columns:auto 1fr 1fr;gap:6px;font-size:.9rem}
+.matrix .h{color:var(--muted);text-align:center;align-self:end}
+.matrix .r{color:var(--muted);align-self:center;padding-right:.5rem;max-width:8ch;line-height:1.25}
+.cell{border:2px solid var(--line);padding:1.1rem .5rem;text-align:center;font:800 clamp(1.4rem,3vw,2rem) var(--display);opacity:0;transform:scale(.9);transition:opacity .5s,transform .5s}
+.cell.ok{background:var(--green);color:#fff;border-color:var(--green)}
+.in .cell{opacity:1;transform:none}
+.cell:nth-of-type(2){transition-delay:.3s}.cell:nth-of-type(3){transition-delay:.45s}.cell:nth-of-type(4){transition-delay:.6s}.cell:nth-of-type(5){transition-delay:.75s}
+.wts{grid-column:1/-1}
+.w{display:grid;grid-template-columns:6.5rem 1fr 3.5rem;gap:.8rem;align-items:center;margin-bottom:.6rem;font-size:.95rem}
+.w .t{position:relative;height:22px;border-left:2px solid var(--line);border-right:1px dashed var(--line);margin-left:50%;margin-right:0;width:50%}
+.w{--c:var(--green)}
+.w .tr{position:relative;height:22px;background:linear-gradient(var(--line),var(--line)) 50% 0/2px 100% no-repeat}
+.w .tr i{position:absolute;top:3px;bottom:3px;width:0;background:var(--green);transition:width 1.2s cubic-bezier(.2,.8,.2,1)}
+.w.neg .tr i{right:50%}.w.pos .tr i{left:50%;background:var(--seal)}
+.in .w .tr i{width:calc(var(--a) * 10%)}
+.note{margin:0}
+.hint{color:var(--muted);font-size:.92rem;margin-top:.4rem}
+
+/* ===== 9. Run it + footer ===== */
+.run{background:var(--ink);color:var(--paper)}
+.run h2{margin-bottom:1.2rem}
+.run p{color:var(--paper);opacity:.75}
+pre{margin-top:1.6rem;background:rgba(0,0,0,.35);color:#EFE7D0;padding:1.1rem 1.25rem;overflow-x:auto;font:400 .92rem/1.7 ui-monospace,'SF Mono',Menlo,Consolas,monospace;border-left:6px solid var(--gold)}
+footer{padding:2rem 0 2.5rem;color:var(--muted);font-size:.9rem}
+
+@media (max-width:900px){
+  .hero,.try,.res{grid-template-columns:1fr}
+}
+@media (max-width:560px){
+  .score .wrap{grid-template-columns:1fr}
+  .score div,.score div+div{padding:1.25rem 0;border-right:0;border-bottom:1px solid var(--line)}
+  .score div:last-child{border-bottom:0}
+  .row{grid-template-columns:1fr 6rem}.row input[type=range]{grid-column:1/-1}
+}
+@media (prefers-reduced-motion:reduce){
+  *,*::before,*::after{animation:none!important;transition:none!important;scroll-behavior:auto!important}
+  .sv.g{opacity:1}.cell{opacity:1;transform:none}.track i{width:var(--w)}.w .tr i{width:calc(var(--a) * 10%)}
+}
+</style>
+</head>
+<body>
+
+<header class="nav" id="nav">
+  <div class="wrap">
+    <a class="brand" href="#top"><svg viewBox="-40 -40 80 80" aria-hidden="true"><path id="logo" fill="none" stroke="currentColor" stroke-width=".9"/></svg>Mintmark</a>
+    <button class="burger" id="burger" aria-label="Menu" aria-expanded="false" aria-controls="menu"><span></span></button>
+    <ul class="menu" id="menu">
+      <li><a href="#try">Try it</a></li>
+      <li><a href="#how">How it works</a></li>
+      <li><a href="#results">Results</a></li>
+      <li><a href="#run">Run it</a></li>
+    </ul>
+  </div>
+</header>
+
+<main id="top">
+  <section class="wrap hero">
+    <div>
+      <h1>Can four numbers tell real money from fake?</h1>
+      <p>Mintmark is a logistic regression trained on about 1,370 banknote images. Give it four measurements taken from a note’s picture and it returns a verdict: genuine or forged, with a probability.</p>
+      <div class="cta">
+        <a class="btn" href="#try">Authenticate a note</a>
+        <a class="link" href="#how">How it decides</a>
+      </div>
+    </div>
+    <div>
+      <div class="specimen">
+        <svg class="note" viewBox="0 0 480 250" role="img" aria-label="Illustration of a specimen banknote being scanned">
+          <defs>
+            <clipPath id="clip"><rect x="6" y="6" width="468" height="238" rx="10"/></clipPath>
+            <linearGradient id="beam" x1="0" x2="1"><stop offset="0" stop-color="#1F6B5B" stop-opacity="0"/><stop offset="1" stop-color="#1F6B5B" stop-opacity=".6"/></linearGradient>
+          </defs>
+          <rect x="6" y="6" width="468" height="238" rx="10" fill="#DDE8D2" stroke="#1F6B5B" stroke-width="3"/>
+          <g clip-path="url(#clip)" fill="none" stroke="#1F6B5B">
+            <g id="waves" opacity=".3" stroke-width=".7"></g>
+            <path id="rosA" opacity=".5" stroke-width=".6"/>
+            <path id="rosB" opacity=".7" stroke-width=".6"/>
+            <path id="rosC" opacity=".55" stroke-width=".6" stroke="#B38A2E"/>
+            <rect class="beam" x="-70" y="6" width="70" height="238" fill="url(#beam)" stroke="none"/>
+          </g>
+          <rect x="16" y="16" width="448" height="218" rx="6" fill="none" stroke="#1F6B5B" stroke-width="1.5"/>
+          <rect class="thread" x="338" y="6" width="5" height="238" fill="#B38A2E" opacity=".8"/>
+          <text x="240" y="118" text-anchor="middle" font-family="Bodoni Moda,Didot,serif" font-size="38" font-weight="800" letter-spacing="7" fill="#1F6B5B" fill-opacity=".9">SPECIMEN</text>
+          <text x="240" y="142" text-anchor="middle" font-family="Hanken Grotesk,sans-serif" font-size="11" letter-spacing="3" fill="#1F6B5B">NOT LEGAL TENDER</text>
+          <text x="36" y="222" font-family="Hanken Grotesk,sans-serif" font-size="12" letter-spacing="2" fill="#10241F">AB 0471926</text>
+          <text x="444" y="40" text-anchor="end" font-family="Hanken Grotesk,sans-serif" font-size="12" letter-spacing="2" fill="#10241F">AB 0471926</text>
+        </svg>
+        <div class="sv g"><span class="stamp good">Genuine</span></div>
+        <div class="sv f"><span class="stamp bad">Forged</span></div>
+      </div>
+      <div class="read" aria-hidden="true">
+        <div>Variance<i style="--w:78%"></i></div>
+        <div>Skewness<i style="--w:55%"></i></div>
+        <div>Kurtosis<i style="--w:35%"></i></div>
+        <div>Entropy<i style="--w:62%"></i></div>
+      </div>
+      <p class="cap">Illustration: a specimen note is scanned, four numbers are read from it, and one of two verdicts is stamped.</p>
+    </div>
+  </section>
+
+  <div class="score">
+    <div class="wrap">
+      <div><b>97.1%</b><span>of 275 unseen notes classified correctly</span></div>
+      <div><b>122 of 122</b><span>forgeries in that test set were caught</span></div>
+      <div><b>4 numbers</b><span>describe each note, nothing else</span></div>
+    </div>
+  </div>
+
+  <section class="s" id="try">
+    <div class="wrap">
+      <h2>Authenticate a note</h2>
+      <div class="try">
+        <div>
+          <div class="presets">
+            <button type="button" data-ex="3.6216,8.6661,-2.8073,-0.44699">Example 1</button>
+            <button type="button" data-ex="-1.3971,3.3191,-1.3927,-1.9948">Example 2</button>
+            <button type="button" id="rand">Random values</button>
+          </div>
+          <div id="sliders"></div>
+          <p class="note2">The inputs are statistics calculated from a photo of the note. The verdict updates as you move a slider.</p>
+        </div>
+        <div class="frame" aria-live="polite">
+          <span class="stamp" id="stamp">Ready</span>
+          <p class="pf" id="pf">Move a slider to begin.</p>
+          <div class="meter"><i id="mk"></i></div>
+          <p class="scale"><span>genuine</span><span>forged</span></p>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <section class="s" id="how">
+    <div class="wrap">
+      <h2>How it decides</h2>
+      <div class="how">
+        <details open>
+          <summary>The four numbers</summary>
+          <div><p>Each note was photographed, and four values were calculated from the picture. <b>Variance</b> is how spread out the pixel values are. <b>Skewness</b> is how lopsided they are. <b>Kurtosis</b> is how extreme the rare bright or dark spots are. <b>Entropy</b> is how random the image is.</p><p>Forgeries are usually printed differently, which shows up in these statistics.</p></div>
+        </details>
+        <details>
+          <summary>Putting them on one scale</summary>
+          <div><p>The four numbers live on different scales, so each one is converted to “how many standard deviations from average”. The average and spread come from the training notes only, never the test notes, so nothing leaks from the exam into the study session.</p></div>
+        </details>
+        <details>
+          <summary>From a score to a probability</summary>
+          <div><p>The model gives each number a weight and adds them into one score. The sigmoid curve then squeezes any score into a probability between 0 and 1. A score of 0 means 50%. Drag the slider to see it.</p>
+            <div class="sgm">
+              <svg viewBox="0 0 300 120" role="img" aria-label="Sigmoid curve"><line x1="0" y1="60" x2="300" y2="60" stroke="currentColor" stroke-opacity=".25" stroke-dasharray="4 4"/><line x1="150" y1="0" x2="150" y2="120" stroke="currentColor" stroke-opacity=".25"/><path id="curve" fill="none" stroke="#1F6B5B" stroke-width="3"/><circle id="dot" r="6" fill="#B3342B" cx="150" cy="60"/></svg>
+              <input type="range" id="score" min="-6" max="6" step="0.1" value="0" aria-label="Score">
+              <output id="sgout"></output>
+            </div>
+          </div>
+        </details>
+        <details>
+          <summary>An honest exam</summary>
+          <div><p>The data was split 80/20, keeping the same share of forgeries in both parts. The model never saw the 275 test notes while learning, so the scores below show how it handles notes it has not met.</p></div>
+        </details>
+      </div>
+    </div>
+  </section>
+
+  <section class="s reveal" id="results">
+    <div class="wrap">
+      <h2>What the test showed</h2>
+      <div class="res">
+        <div>
+          <h3>Accuracy</h3>
+          <div class="bar" style="--w:56%"><label><span>Always guess the more common class</span><span>about 56%</span></label><div class="track"><i></i></div></div>
+          <div class="bar" style="--w:97.1%"><label><span>Logistic regression with scaling</span><span>97.1%</span></label><div class="track"><i></i></div></div>
+          <p class="hint">Training accuracy was 98.5%, close to the test score, so the model is not just memorizing.</p>
+        </div>
+        <div>
+          <h3>Where the 8 mistakes were</h3>
+          <div class="matrix" role="table" aria-label="Confusion matrix on 275 test notes">
+            <span></span><span class="h">Said genuine</span><span class="h">Said forged</span>
+            <span class="r">Was genuine</span><div class="cell ok">145</div><div class="cell">8</div>
+            <span class="r">Was forged</span><div class="cell">0</div><div class="cell ok">122</div>
+          </div>
+          <p class="hint">Every error was a genuine note flagged as forged, the safer direction.</p>
+        </div>
+        <div class="wts">
+          <h3>What the model leans on</h3>
+          <div class="w neg" style="--a:4.81"><span>Skewness</span><div class="tr"><i></i></div><span>-4.81</span></div>
+          <div class="w neg" style="--a:4.67"><span>Variance</span><div class="tr"><i></i></div><span>-4.67</span></div>
+          <div class="w neg" style="--a:4.40"><span>Kurtosis</span><div class="tr"><i></i></div><span>-4.40</span></div>
+          <div class="w pos" style="--a:.26"><span>Entropy</span><div class="tr"><i></i></div><span>+0.26</span></div>
+          <p class="hint">Bars to the left push toward genuine, bars to the right toward forged. Entropy barely matters. The first three are partly correlated, so don’t read their order too literally.</p>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <section class="s run" id="run">
+    <div class="wrap">
+      <h2>Run it yourself</h2>
+      <p>The page is served by a small FastAPI app that loads the saved model and exposes one prediction endpoint.</p>
+<pre>python -m pip install fastapi "uvicorn[standard]"
+python -m uvicorn main:app --reload
+# then open http://127.0.0.1:8000/</pre>
+    </div>
+  </section>
+</main>
+
+<footer>
+  <div class="wrap">Mintmark is a learning project built on a public dataset. The note artwork is an original specimen, not any real currency, and the model is not for real cash handling.</div>
+</footer>
+
+<script>
+/* ===== Engraved artwork: guilloche curves drawn from math ===== */
+function roto(cx,cy,R,r,d){const k=R-r,n=r*110;let p='';for(let i=0;i<=n;i++){const t=i/n*Math.PI*2*r;p+=(i?'L':'M')+(cx+k*Math.cos(t)+d*Math.cos(k/r*t)).toFixed(1)+' '+(cy+k*Math.sin(t)-d*Math.sin(k/r*t)).toFixed(1)}return p}
+document.getElementById('rosA').setAttribute('d',roto(130,125,120,17,60));
+document.getElementById('rosB').setAttribute('d',roto(110,125,48,11,30));
+document.getElementById('rosC').setAttribute('d',roto(395,125,30,7,18));
+document.getElementById('logo').setAttribute('d',roto(0,0,30,7,18));
+(function(){let d='';for(let i=0;i<18;i++){const y0=20+i*12;d+='M0 '+y0;for(let x=8;x<=480;x+=8)d+='L'+x+' '+(y0+4*Math.sin(x/22+i*.7)).toFixed(1)}document.getElementById('waves').innerHTML='<path d="'+d+'"/>'})();
+
+/* ===== Nav ===== */
+const nav=document.getElementById('nav'),burger=document.getElementById('burger');
+burger.addEventListener('click',()=>{const o=nav.classList.toggle('open');burger.setAttribute('aria-expanded',o)});
+document.querySelectorAll('#menu a').forEach(a=>a.addEventListener('click',()=>{nav.classList.remove('open');burger.setAttribute('aria-expanded',false)}));
+
+/* ===== Live authenticator: calls POST /predict on the same origin ===== */
+const F=[['variance','Variance',-8,8],['skewness','Skewness',-14,14],['curtosis','Kurtosis',-6,18],['entropy','Entropy',-9,3]];
+const box=document.getElementById('sliders'),val={};
+let timer;function queue(){clearTimeout(timer);timer=setTimeout(run,180)}
+F.forEach(([k,l,min,max])=>{
+  const r=document.createElement('div');r.className='row';
+  r.innerHTML='<label for="n_'+k+'">'+l+'</label><input id="n_'+k+'" type="number" step="0.01"><input type="range" aria-label="'+l+'" min="'+min+'" max="'+max+'" step="0.01">';
+  box.appendChild(r);
+  const n=r.children[1],s=r.children[2];
+  n.addEventListener('input',()=>{s.value=n.value;queue()});
+  s.addEventListener('input',()=>{n.value=s.value;queue()});
+  val[k]={set:v=>{n.value=v;s.value=v},get:()=>parseFloat(n.value),min,max};
+});
+function fill(a){F.forEach(([k],i)=>val[k].set(a[i]));run()}
+document.querySelectorAll('[data-ex]').forEach(b=>b.addEventListener('click',()=>fill(b.dataset.ex.split(',').map(Number))));
+document.getElementById('rand').addEventListener('click',()=>fill(F.map(([k])=>+(val[k].min+Math.random()*(val[k].max-val[k].min)).toFixed(2))));
+const stamp=document.getElementById('stamp'),pf=document.getElementById('pf'),mk=document.getElementById('mk');
+let last='';
+function msg(t){stamp.textContent='Offline';stamp.className='stamp';pf.textContent=t}
+function render(d){
+  const f=d.label==='forged',p=Math.round(d.probability_forged*1000)/10;
+  stamp.textContent=f?'Forged':'Genuine';stamp.className='stamp '+(f?'bad':'good');
+  if(d.label!==last){stamp.classList.remove('pop');void stamp.offsetWidth;stamp.classList.add('pop');last=d.label}
+  else stamp.classList.add('pop');
+  pf.innerHTML='Probability forged: <b>'+p+'%</b>';mk.style.left=p+'%';
+}
+async function run(){
+  const body={};
+  for(const [k] of F){const v=val[k].get();if(Number.isNaN(v)){return}body[k]=v}
+  try{
+    const r=await fetch('/predict',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(body)});
+    if(!r.ok)throw new Error(r.status);
+    render(await r.json());
+  }catch(_){msg('Can’t reach the API. Start it, then open this page at http://127.0.0.1:8000.')}
+}
+fill([3.6216,8.6661,-2.8073,-0.44699]);
+
+/* ===== Sigmoid explainer ===== */
+(function(){
+  let d='';for(let x=-6;x<=6.01;x+=.25)d+=(d?'L':'M')+((x+6)/12*300).toFixed(1)+' '+(110-100/(1+Math.exp(-x))).toFixed(1);
+  document.getElementById('curve').setAttribute('d',d);
+  const sc=document.getElementById('score'),dot=document.getElementById('dot'),out=document.getElementById('sgout');
+  function upd(){const s=+sc.value,p=1/(1+Math.exp(-s));dot.setAttribute('cx',(s+6)/12*300);dot.setAttribute('cy',110-100*p);out.textContent='Score '+s.toFixed(1)+' gives a '+(p*100).toFixed(1)+'% chance of forged'}
+  sc.addEventListener('input',upd);upd();
+})();
+
+/* ===== One scroll moment: bars fill, matrix lands, weights grow ===== */
+const io=new IntersectionObserver(es=>es.forEach(e=>{if(e.isIntersecting){e.target.classList.add('in');io.unobserve(e.target)}}),{threshold:.2});
+document.querySelectorAll('.reveal').forEach(el=>io.observe(el));
+</script>
+</body>
+</html>
